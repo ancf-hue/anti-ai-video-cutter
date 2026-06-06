@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Видеорезка + Текст</title>
+<link rel="icon" href="favicon.ico" type="image/x-icon">
+<style>
+  :root {
+    --bg-start: #0f172a; --bg-end: #1e3a8a;
+    --glass: rgba(255, 255, 255, 0.08); --glass-border: rgba(255, 255, 255, 0.15);
+    --text: #e2e8f0; --accent: #3b82f6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
+    color: var(--text); min-height: 100vh;
+  }
+  .glass {
+    background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border); border-radius: 16px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  }
+  .btn-3d {
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; color: white;
+    font-weight: 600; font-size: 14px; padding: 10px 16px; cursor: pointer;
+    box-shadow: 0 4px 0 #1d4ed8, 0 6px 12px rgba(0,0,0,0.4); transition: all 0.1s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-3d:active { transform: translateY(4px); box-shadow: 0 0 0 #1d4ed8, 0 2px 4px rgba(0,0,0,0.4); }
+  .btn-3d.sec { background: linear-gradient(180deg, #475569 0%, #334155 100%); box-shadow: 0 4px 0 #1e293b, 0 6px 12px rgba(0,0,0,0.4); }
+  .btn-3d.success { background: linear-gradient(180deg, #34d399 0%, #059669 100%); box-shadow: 0 4px 0 #047857, 0 6px 12px rgba(0,0,0,0.4); }
+  .btn-3d.danger { background: linear-gradient(180deg, #f87171 0%, #ef4444 100%); box-shadow: 0 4px 0 #b91c1c, 0 6px 12px rgba(0,0,0,0.4); }
+  .btn-3d:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+  header { padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--glass-border); }
+  .logo-img { width: 36px; height: 36px; border-radius: 6px; background: #fff; padding: 2px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  header .hint { font-size: 12px; color: #94a3b8; margin-left: auto; }
+
+  main { padding: 16px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  
+  .video-container {
+    position: relative; background: #000; border-radius: 12px; overflow: hidden;
+    aspect-ratio: 16/9; width: 100%; cursor: pointer; transition: border-color 0.2s;
+    border: 1px solid var(--glass-border);
+  }
+  .video-container:hover { border-color: var(--accent); }
+  .video-container.crop-mode { cursor: crosshair; }
+  video { width: 100%; height: 100%; object-fit: contain; pointer-events: auto; }
+  canvas.preview { 
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+    pointer-events: none; 
+    object-fit: contain;
+  }
+  
+  .drag-marker {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    background: rgba(59, 130, 246, 0.9);
+    border: 2px solid white;
+    border-radius: 50%;
+    cursor: grab;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    transition: transform 0.1s;
+    pointer-events: auto;
+  }
+  .drag-marker:active { cursor: grabbing; transform: scale(1.1); }
+  .drag-marker::after { content: "✋"; color: white; font-size: 18px; }
+  
+  .placeholder {
+    color: #64748b; font-size: 15px; text-align: center;
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    pointer-events: none;
+  }
+  .open-btn-visual {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    color: white; padding: 10px 18px; border-radius: 10px;
+    font-weight: 600; font-size: 14px; margin-top: 8px;
+    box-shadow: 0 3px 0 #1d4ed8, 0 4px 8px rgba(0,0,0,0.3);
+    pointer-events: none;
+  }
+  
+  .loading-progress {
+    position: absolute; bottom: 0; left: 0; height: 4px;
+    background: linear-gradient(90deg, #3b82f6, #34d399);
+    transition: width 0.3s; width: 0%;
+  }
+
+  .timeline-container { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  .timeline {
+    position: relative; height: 60px; background: rgba(0,0,0,0.3);
+    border-radius: 8px; overflow: hidden; cursor: pointer;
+  }
+  .timeline-track {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+    opacity: 0.3;
+  }
+  .timeline-selection {
+    position: absolute; top: 0; bottom: 0;
+    background: rgba(52, 211, 153, 0.4);
+    border: 2px solid #34d399;
+    cursor: move;
+  }
+  .timeline-handle {
+    position: absolute; top: 0; bottom: 0; width: 12px;
+    background: #34d399; cursor: ew-resize;
+    display: flex; align-items: center; justify-content: center;
+    color: #064e3b; font-weight: bold; font-size: 18px;
+  }
+  .timeline-handle.left { left: -6px; }
+  .timeline-handle.right { right: -6px; }
+  .timeline-playhead {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: #ef4444; pointer-events: none;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  }
+  .time-labels { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; }
+
+  .controls-panel { padding: 16px; display: none; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+
+  .options-panel { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  .options-panel .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .options-panel label { font-size: 13px; color: #cbd5e1; display: flex; align-items: center; gap: 6px; }
+  .options-panel input[type="number"], .options-panel input[type="text"], .options-panel select {
+    padding: 8px; border: 1px solid var(--glass-border); border-radius: 8px;
+    background: rgba(0,0,0,0.3); color: #fff;
+  }
+  .options-panel input[type="number"] { width: 70px; }
+  .options-panel input[type="text"] { flex: 1; min-width: 200px; }
+  .options-panel input[type="color"] {
+    width: 40px; height: 36px; padding: 2px; border: 1px solid var(--glass-border);
+    border-radius: 8px; background: transparent; cursor: pointer;
+  }
+  .options-panel input[type="range"] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+  
+  .crop-info-box {
+    background: rgba(0,0,0,0.5); padding: 8px; border-radius: 8px; width: 100%;
+  }
+
+  .progress-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+    display: none; align-items: center; justify-content: center; z-index: 9999;
+    backdrop-filter: blur(8px);
+  }
+  .progress-box {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: 16px; padding: 32px; text-align: center; min-width: 300px;
+  }
+  .progress-bar {
+    width: 100%; height: 8px; background: rgba(0,0,0,0.3);
+    border-radius: 4px; overflow: hidden; margin: 16px 0;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, #3b82f6, #34d399);
+    width: 0%; transition: width 0.3s;
+  }
+
+  footer { margin-top: 20px; padding: 24px 16px; text-align: center; border-top: 1px solid var(--glass-border); }
+  footer h3 { margin: 0 0 8px 0; color: #fff; font-size: 18px; }
+  footer p { margin: 0; line-height: 1.5; color: #cbd5e1; max-width: 600px; margin-inline: auto; }
+  .link-box {
+    display: inline-block; margin-top: 16px; padding: 12px 20px;
+    background: rgba(59, 130, 246, 0.15); border: 1px solid var(--accent);
+    border-radius: 8px; color: #60a5fa; text-decoration: none; font-weight: 500;
+  }
+
+  .toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: rgba(52, 211, 153, 0.9); color: #064e3b; padding: 12px 24px;
+    border-radius: 8px; font-size: 14px; font-weight: 600; z-index: 9999;
+    opacity: 0; transition: all 0.3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.error { background: rgba(239, 68, 68, 0.9); color: white; }
+
+  @media (max-width: 600px) {
+    .btn-3d { padding: 8px 12px; font-size: 13px; }
+    .video-container { aspect-ratio: 3/4; }
+    .drag-marker { width: 28px; height: 28px; }
+    .drag-marker::after { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="favicon.ico" alt="Логотип" class="logo-img" onerror="this.style.display='none'">
+  <h1>Видеорезка + Текст</h1>
+  <span class="hint">Офлайн · Текст можно двигать за синий кружок</span>
+</header>
+
+<main>
+  <div class="glass video-container" id="videoContainer">
+    <div class="placeholder" id="placeholder">
+      <div style="font-size:40px">🎬</div>
+      <div>Перетащите видео сюда или нажмите кнопку</div>
+      <div class="open-btn-visual">📁 Открыть видео</div>
+      <span style="font-size:12px; color:#64748b; margin-top:4px;">MP4, WebM, MOV (макс. 500 МБ)</span>
+    </div>
+    <video id="videoPlayer" controls style="display:none;" playsinline></video>
+    <canvas class="preview" id="previewCanvas" style="display:none;"></canvas>
+    <div id="dragMarker" class="drag-marker"></div>
+    <div class="loading-progress" id="loadingProgress"></div>
+  </div>
+
+  <div class="glass timeline-container" id="timelineContainer">
+    <div style="font-size:13px; color:#cbd5e1; margin-bottom:4px;">
+      📍 Таймлайн: перетащите маркеры для выбора начала и конца
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="timeline-track"></div>
+      <div class="timeline-selection" id="timelineSelection">
+        <div class="timeline-handle left" id="handleLeft">◀</div>
+        <div class="timeline-handle right" id="handleRight">▶</div>
+      </div>
+      <div class="timeline-playhead" id="playhead"></div>
+    </div>
+    <div class="time-labels">
+      <span id="startTime">00:00</span>
+      <span id="selectionInfo">Выбрано: 0 сек</span>
+      <span id="endTime">00:00</span>
+    </div>
+  </div>
+
+  <div class="glass controls-panel" id="controlsPanel">
+    <button class="btn-3d sec" id="btnPlayPause">▶ Играть</button>
+    <button class="btn-3d sec" id="btnOpenNew">📁 Другое видео</button>
+    <input type="file" id="fileInput" accept="video/*" style="display:none;">
+  </div>
+
+  <div class="glass options-panel" id="optionsPanel">
+    <h3 style="margin:0; color:#fff; font-size:16px;">⚙️ Настройки экспорта</h3>
+    
+    <div class="row">
+      <label>Быстрые настройки:
+        <select id="quickPreset">
+          <option value="">Выберите пресет</option>
+          <option value="watermark">💧 Водяной знак (правый нижний)</option>
+          <option value="title">📝 Заголовок (по центру)</option>
+          <option value="subtitle">💬 Субтитры (внизу)</option>
+        </select>
+      </label>
+    </div>
+    
+    <div class="row">
+      <label>Скорость:
+        <select id="speedSelect">
+          <option value="0.5">0.5x (замедление)</option>
+          <option value="1" selected>1x (нормально)</option>
+          <option value="1.5">1.5x (ускорение)</option>
+          <option value="2">2x (ускорение)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row">
+      <label>✏️ Текст на видео:</label>
+      <input type="text" id="overlayText" placeholder="Введите текст..." autocomplete="off" style="flex:2;">
+      <button class="btn-3d sec" id="clearTextBtn" style="padding:6px 12px;">Очистить</button>
+    </div>
+
+    <div class="row">
+      <label>🎨 Цвет: <input type="color" id="textColor" value="#ffffff"></label>
+      <label>📏 Размер: <input type="number" id="textSize" value="48" min="10" max="120" step="2"> px</label>
+      <label>🖋 Шрифт:
+        <select id="fontFamily">
+          <option value="Arial Black">Arial Black</option>
+          <option value="Impact">Impact</option>
+          <option value="Arial" selected>Arial</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Courier New">Courier New</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="textStroke" checked> Обводка</label>
+    </div>
+
+    <div class="row">
+      <label style="color:#86efac;">💡 Подсказка: перетащите текст за синий кружок с рукой ✋</label>
+    </div>
+
+    <div class="row" style="border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 8px;">
+      <strong style="color:#34d399;">✂️ Удаление логотипов / обрезка</strong>
+    </div>
+
+    <div class="row">
+      <button class="btn-3d sec" id="btnCropMode">🎯 Включить режим обрезки</button>
+      <button class="btn-3d sec" id="btnResetCrop" style="display:none;">⟳ Сбросить обрезку</button>
+    </div>
+
+    <div class="row" id="cropPreview" style="display:none;">
+      <div class="crop-info-box">
+        <span id="cropStatus">📐 Выберите область на видео</span><br>
+        <small style="color:#94a3b8;">Нажмите и перетащите область, которую нужно оставить</small>
+      </div>
+    </div>
+
+    <div class="row" id="zoomControls" style="display:none;">
+      <label>🔍 Точная настройка:
+        <input type="range" id="cropZoom" min="1" max="4" step="0.05" value="1">
+        <span id="cropZoomValue">100%</span>
+      </label>
+      <button class="btn-3d sec" id="autoCropLogo">🤖 Авто-обрезка (центр)</button>
+    </div>
+
+    <div class="row" id="cropPresets" style="display:none;">
+      <button class="btn-3d sec" id="cropLogoTop">📺 Убрать лого ТВ (сверху)</button>
+      <button class="btn-3d sec" id="cropLogoCorner">🏷️ Убрать угловой лого</button>
+    </div>
+
+    <div class="row" style="justify-content:center; margin-top:12px;">
+      <button class="btn-3d success" id="btnExport">💾 Экспортировать видео</button>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <h3>🤝 ПОДДЕРЖАТЬ ПРОЕКТ 💙</h3>
+  <p style="margin-bottom: 4px;">Приложение бесплатное. Было и останется.</p>
+  <p style="margin-bottom: 16px;">Если проект помог вам или вашим близким — можете поддержать разработку добровольным переводом.</p>
+  
+  <div style="margin: 16px 0; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+    <div style="font-size: 18px; font-weight: bold; color: #fff; text-align: center;">📱 ПЕРЕВОД ПО НОМЕРУ ТЕЛЕФОНА:<br>8-920-227-56-76</div>
+    <button class="btn-3d sec" id="copyPhone" style="padding: 8px 16px; font-size: 14px;">📋 Копировать номер</button>
+  </div>
+  
+  <p style="color: #86efac; font-weight: 600; margin-top: 12px;">✅ Деньги придут мгновенно. Без комиссии. Безопасно.</p>
+  <p style="margin-top: 8px; font-size: 18px;">❤️ Спасибо за поддержку! ❤️</p>
+  
+  <a href="https://ancf-hue.github.io/" target="_blank" class="link-box">
+    🌟 👉 https://ancf-hue.github.io/<br>
+    <span style="font-size: 14px; font-weight: normal;">Каталог бесплатных офлайн-приложений Anti-AI Shield.</span>
+  </a>
+</footer>
+
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box glass">
+    <div style="font-size:32px;">⏳</div>
+    <h3 style="margin:12px 0; color:#fff;">Обработка видео...</h3>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div id="progressText" style="color:#94a3b8; margin-bottom:16px;">0%</div>
+    <button class="btn-3d danger" id="btnCancelExport">❌ Отменить экспорт</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">✅ Готово!</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const videoContainer = $('videoContainer');
+  const placeholder = $('placeholder');
+  const videoPlayer = $('videoPlayer');
+  const previewCanvas = $('previewCanvas');
+  const dragMarker = $('dragMarker');
+  const timelineContainer = $('timelineContainer');
+  const controlsPanel = $('controlsPanel');
+  const optionsPanel = $('optionsPanel');
+  const timeline = $('timeline');
+  const timelineSelection = $('timelineSelection');
+  const handleLeft = $('handleLeft');
+  const handleRight = $('handleRight');
+  const playhead = $('playhead');
+  const fileInput = $('fileInput');
+  const progressOverlay = $('progressOverlay');
+  const progressFill = $('progressFill');
+  const progressText = $('progressText');
+  const btnCancelExport = $('btnCancelExport');
+  const loadingProgress = $('loadingProgress');
+
+  let currentBlobUrl = null;
+  let startTime = 0;
+  let endTime = 0;
+  let duration = 0;
+  let isDragging = null;
+  let dragStartX = 0;
+  let dragStartLeft = 0;
+  let dragStartWidth = 0;
+  
+  let audioContext = null;
+  let audioSource = null;
+  let audioConnectionReady = false;
+  let audioConnectedToSpeakers = false; // ✅ Флаг состояния подключения к колонкам
+  
+  let previewAnimationId = null;
+  let isExportCancelled = false;
+
+  let textX = 0.5;
+  let textY = 0.85;
+  
+  let isMarkerDragging = false;
+  let markerDragStartX = 0;
+  let markerDragStartY = 0;
+  let startMarkerX = 0.5;
+  let startMarkerY = 0.85;
+
+  let cropModeActive = false;
+  let cropRect = null;
+  let cropZoom = 1;
+  let isSelectingCrop = false;
+  let selectionStart = { x: 0, y: 0 };
+  let selectionEnd = { x: 0, y: 0 };
+
+  // ✅ Ограничение на длительность экспорта
+  const MAX_EXPORT_DURATION = 300; // 5 минут
+
+  if (!window.MediaRecorder) {
+    setTimeout(() => {
+      showToast('❌ Ваш браузер не поддерживает экспорт видео. Используйте Chrome, Firefox или Edge.', true);
+      $('btnExport').disabled = true;
+    }, 1000);
+  }
+
+  async function initAudio() {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+    return audioContext;
+  }
+
+  async function setupAudioOnce() {
+    if (audioConnectionReady) return true;
+    if (!videoPlayer) return false;
+    
+    try {
+      await initAudio();
+      if (!audioSource) {
+        audioSource = audioContext.createMediaElementSource(videoPlayer);
+        audioSource.connect(audioContext.destination);
+        audioConnectedToSpeakers = true; // ✅ Устанавливаем флаг
+      }
+      audioConnectionReady = true;
+      return true;
+    } catch (e) {
+      console.warn('Не удалось подключить аудио:', e);
+      return false;
+    }
+  }
+
+  function loadVideo(file) {
+    if (!file) return;
+    if (!file.type.startsWith('video/')) {
+      showToast('❌ Пожалуйста, выберите видеофайл.', true);
+      return;
+    }
+    if (file.size > 500 * 1024 * 1024) {
+      showToast('❌ Файл слишком большой (максимум 500 МБ).', true);
+      return;
+    }
+
+    showToast('📀 Загрузка видео...');
+
+    let loadProgress = 0;
+    loadingProgress.style.width = '0%';
+    const loadInterval = setInterval(() => {
+      loadProgress = Math.min(90, loadProgress + 10);
+      loadingProgress.style.width = loadProgress + '%';
+    }, 50);
+
+    if (currentBlobUrl) {
+      URL.revokeObjectURL(currentBlobUrl);
+      currentBlobUrl = null;
+    }
+    
+    if (previewAnimationId) {
+      cancelAnimationFrame(previewAnimationId);
+      previewAnimationId = null;
+    }
+    
+    cropRect = null;
+    cropZoom = 1;
+    disableCropMode();
+    
+    textX = 0.5;
+    textY = 0.85;
+    
+    const ctx = previewCanvas.getContext('2d');
+    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
+    currentBlobUrl = URL.createObjectURL(file);
+
+    placeholder.style.display = 'none';
+    videoPlayer.style.display = 'block';
+    previewCanvas.style.display = 'block';
+    videoPlayer.src = currentBlobUrl;
+
+    videoPlayer.onloadedmetadata = () => {
+      clearInterval(loadInterval);
+      loadingProgress.style.width = '100%';
+      setTimeout(() => { loadingProgress.style.width = '0%'; }, 500);
+      
+      duration = videoPlayer.duration;
+      startTime = 0;
+      endTime = duration;
+      
+      previewCanvas.width = videoPlayer.videoWidth;
+      previewCanvas.height = videoPlayer.videoHeight;
+      
+      timelineContainer.style.display = 'flex';
+      controlsPanel.style.display = 'flex';
+      optionsPanel.style.display = 'flex';
+      
+      updateTimeline();
+      startPreview();
+      forcePreviewUpdate();
+      
+      showToast('✅ Видео загружено! Перетащите текст за синий кружок');
+    };
+    
+    videoPlayer.onerror = () => {
+      clearInterval(loadInterval);
+      loadingProgress.style.width = '0%';
+      showToast('❌ Ошибка загрузки видео. Попробуйте другой файл.', true);
+      console.error('Video load error');
+    };
+  }
+
+  videoContainer.addEventListener('click', (e) => {
+    if (videoPlayer.style.display === 'none' || videoPlayer.style.display === '') {
+      fileInput.value = '';
+      fileInput.click();
+    }
+  });
+
+  $('btnOpenNew').onclick = (e) => {
+    e.stopPropagation();
+    fileInput.value = '';
+    fileInput.click();
+  };
+
+  fileInput.onchange = (e) => {
+    if (e.target.files[0]) loadVideo(e.target.files[0]);
+  };
+
+  videoContainer.addEventListener('dragover', e => e.preventDefault());
+  videoContainer.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) loadVideo(e.dataTransfer.files[0]);
+  });
+
+  function updateTimeline() {
+    if (!duration) return;
+    const leftPercent = (startTime / duration) * 100;
+    const widthPercent = ((endTime - startTime) / duration) * 100;
+    
+    timelineSelection.style.left = leftPercent + '%';
+    timelineSelection.style.width = widthPercent + '%';
+    
+    $('startTime').textContent = formatTime(startTime);
+    $('endTime').textContent = formatTime(endTime);
+    $('selectionInfo').textContent = `Выбрано: ${(endTime - startTime).toFixed(1)} сек`;
+  }
+
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  handleLeft.addEventListener('mousedown', startDragLeft);
+  handleLeft.addEventListener('touchstart', startDragLeft, { passive: false });
+  handleRight.addEventListener('mousedown', startDragRight);
+  handleRight.addEventListener('touchstart', startDragRight, { passive: false });
+  timelineSelection.addEventListener('mousedown', startDragSelection);
+  timelineSelection.addEventListener('touchstart', startDragSelection, { passive: false });
+
+  function startDragLeft(e) { e.preventDefault(); e.stopPropagation(); isDragging = 'left'; dragStartX = getX(e); }
+  function startDragRight(e) { e.preventDefault(); e.stopPropagation(); isDragging = 'right'; dragStartX = getX(e); }
+  function startDragSelection(e) {
+    if (e.target === handleLeft || e.target === handleRight) return;
+    e.preventDefault(); e.stopPropagation();
+    isDragging = 'selection';
+    dragStartX = getX(e);
+    dragStartLeft = startTime;
+    dragStartWidth = endTime - startTime;
+  }
+
+  function getX(e) {
+    if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
+    if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientX;
+    return e.clientX;
+  }
+
+  window.addEventListener('mousemove', onDrag);
+  window.addEventListener('touchmove', onDrag, { passive: false });
+  window.addEventListener('mouseup', stopDrag);
+  window.addEventListener('touchend', stopDrag);
+
+  function onDrag(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    const rect = timeline.getBoundingClientRect();
+    const x = getX(e);
+    const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    const time = percent * duration;
+
+    if (isDragging === 'left') {
+      startTime = Math.max(0, Math.min(time, endTime - 0.5));
+    } else if (isDragging === 'right') {
+      endTime = Math.min(duration, Math.max(time, startTime + 0.5));
+    } else if (isDragging === 'selection') {
+      const deltaX = (x - dragStartX) / rect.width * duration;
+      let newStart = dragStartLeft + deltaX;
+      let newEnd = newStart + dragStartWidth;
+      
+      if (newStart < 0) { newStart = 0; newEnd = dragStartWidth; }
+      if (newEnd > duration) { newEnd = duration; newStart = duration - dragStartWidth; }
+      
+      startTime = newStart;
+      endTime = newEnd;
+    }
+
+    updateTimeline();
+    videoPlayer.currentTime = startTime;
+  }
+
+  function stopDrag() { isDragging = null; }
+
+  timeline.addEventListener('click', (e) => {
+    if (isDragging) return;
+    const rect = timeline.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    videoPlayer.currentTime = percent * duration;
+  });
+
+  videoPlayer.addEventListener('timeupdate', () => {
+    if (!duration) return;
+    const percent = (videoPlayer.currentTime / duration) * 100;
+    playhead.style.left = percent + '%';
+    
+    if (videoPlayer.currentTime >= endTime) {
+      videoPlayer.pause();
+      videoPlayer.currentTime = startTime;
+      $('btnPlayPause').textContent = '▶ Играть';
+      forcePreviewUpdate();
+    }
+  });
+
+  $('btnPlayPause').onclick = async () => {
+    await setupAudioOnce();
+    
+    if (videoPlayer.paused) {
+      if (videoPlayer.currentTime < startTime || videoPlayer.currentTime >= endTime) {
+        videoPlayer.currentTime = startTime;
+      }
+      try {
+        await videoPlayer.play();
+      } catch (err) {
+        console.error('Play rejected:', err);
+        showToast('❌ Не удалось запустить воспроизведение. Нажмите ещё раз.', true);
+        return;
+      }
+      $('btnPlayPause').textContent = '⏸ Пауза';
+    } else {
+      videoPlayer.pause();
+      $('btnPlayPause').textContent = '▶ Играть';
+      forcePreviewUpdate();
+    }
+  };
+
+  function startPreview() {
+    function drawPreview() {
+      if (!videoPlayer.paused && videoPlayer.currentTime < endTime) {
+        drawCurrentFrame();
+        previewAnimationId = requestAnimationFrame(drawPreview);
+      }
+    }
+    videoPlayer.addEventListener('play', drawPreview);
+  }
+
+  function drawVideoWithCrop(ctx, canvasWidth, canvasHeight) {
+    if (!cropRect) {
+      ctx.drawImage(videoPlayer, 0, 0, canvasWidth, canvasHeight);
+      return;
+    }
+    ctx.drawImage(
+      videoPlayer,
+      cropRect.x, cropRect.y, cropRect.width, cropRect.height,
+      0, 0, canvasWidth, canvasHeight
+    );
+  }
+
+  function drawTextOnCanvas(ctx, canvasWidth, canvasHeight) {
+    const text = $('overlayText').value;
+    if (!text) return;
+    
+    const size = +$('textSize').value;
+    const family = $('fontFamily').value;
+    const color = $('textColor').value;
+    const useStroke = $('textStroke').checked;
+    
+    const scale = Math.min(2, Math.max(0.5, canvasWidth / 1280));
+    let finalSize = Math.floor(size * scale);
+    finalSize = Math.min(120, Math.max(16, finalSize));
+    
+    ctx.save();
+    ctx.font = `bold ${finalSize}px "${family}", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    const maxWidth = canvasWidth * 0.9;
+    const words = text.split(/\s+/);
+    const lines = [];
+    let currentLine = '';
+    for (let w of words) {
+      const test = currentLine ? currentLine + ' ' + w : w;
+      if (ctx.measureText(test).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = w;
+      } else {
+        currentLine = test;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    if (lines.length === 0) lines.push(text);
+    
+    const lineHeight = finalSize * 1.25;
+    const totalHeight = lines.length * lineHeight;
+    
+    let absX = textX * canvasWidth;
+    let absY = textY * canvasHeight;
+    
+    absX = Math.min(canvasWidth - finalSize/2, Math.max(finalSize/2, absX));
+    absY = Math.min(canvasHeight - totalHeight/2, Math.max(totalHeight/2, absY));
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const y = absY - totalHeight/2 + i * lineHeight + lineHeight/2;
+      
+      if (useStroke) {
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(3, finalSize/10);
+        ctx.lineJoin = 'round';
+        ctx.strokeText(line, absX, y);
+      }
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = Math.max(4, finalSize/12);
+      ctx.fillStyle = color;
+      ctx.fillText(line, absX, y);
+      ctx.shadowColor = 'transparent';
+    }
+    ctx.restore();
+  }
+
+  function drawCurrentFrame(targetCanvas = previewCanvas) {
+    if (!duration || videoPlayer.readyState < 2) return;
+    
+    const ctx = targetCanvas.getContext('2d');
+    const canvasWidth = targetCanvas.width;
+    const canvasHeight = targetCanvas.height;
+    
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    drawVideoWithCrop(ctx, canvasWidth, canvasHeight);
+    drawTextOnCanvas(ctx, canvasWidth, canvasHeight);
+    
+    if (cropModeActive && isSelectingCrop) {
+      ctx.strokeStyle = '#34d399';
+      ctx.fillStyle = 'rgba(52, 211, 153, 0.2)';
+      ctx.lineWidth = 3;
+      const width = selectionEnd.x - selectionStart.x;
+      const height = selectionEnd.y - selectionStart.y;
+      ctx.fillRect(selectionStart.x, selectionStart.y, width, height);
+      ctx.strokeRect(selectionStart.x, selectionStart.y, width, height);
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = '#34d399';
+      ctx.shadowBlur = 4;
+      ctx.fillText(`${Math.abs(Math.round(width))}×${Math.abs(Math.round(height))}`, 
+                   selectionStart.x + 10, selectionStart.y + 25);
+    }
+  }
+
+  function forcePreviewUpdate() {
+    if (duration && videoPlayer.readyState >= 2) {
+      drawCurrentFrame();
+      updateMarkerPosition();
+    }
+  }
+
+  function updateMarkerPosition() {
+    const text = $('overlayText').value;
+    if (!text || !duration || videoPlayer.readyState < 2) {
+      dragMarker.style.display = 'none';
+      return;
+    }
+    
+    const canvasRect = previewCanvas.getBoundingClientRect();
+    if (canvasRect.width === 0) return;
+    
+    const canvasWidth = previewCanvas.width;
+    const canvasHeight = previewCanvas.height;
+    let absX = textX * canvasWidth;
+    let absY = textY * canvasHeight;
+    
+    const size = +$('textSize').value;
+    const scale = Math.min(2, Math.max(0.5, canvasWidth / 1280));
+    let finalSize = Math.floor(size * scale);
+    finalSize = Math.min(120, Math.max(16, finalSize));
+    
+    const markerScreenX = canvasRect.left + (absX / canvasWidth) * canvasRect.width;
+    const markerScreenY = canvasRect.top + (absY / canvasHeight) * canvasRect.height - finalSize * 0.8;
+    
+    dragMarker.style.left = (markerScreenX - 16) + 'px';
+    dragMarker.style.top = (markerScreenY - 16) + 'px';
+    dragMarker.style.display = 'flex';
+  }
+
+  function initMarkerDrag() {
+    const onStart = (e) => {
+      const text = $('overlayText').value;
+      if (!text || !duration) return;
+      if (cropModeActive) return;
+      
+      e.preventDefault();
+      e.stopPropagation();
+      
+      isMarkerDragging = true;
+      startMarkerX = textX;
+      startMarkerY = textY;
+      
+      if (e.touches) {
+        markerDragStartX = e.touches[0].clientX;
+        markerDragStartY = e.touches[0].clientY;
+      } else {
+        markerDragStartX = e.clientX;
+        markerDragStartY = e.clientY;
+      }
+      
+      showToast('✋ Перетащите текст в нужное место', false);
+    };
+    
+    const onMove = (e) => {
+      if (!isMarkerDragging) return;
+      e.preventDefault();
+      
+      let clientX, clientY;
+      if (e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      
+      const deltaX = clientX - markerDragStartX;
+      const deltaY = clientY - markerDragStartY;
+      
+      const canvasRect = previewCanvas.getBoundingClientRect();
+      if (canvasRect.width === 0) return;
+      
+      const deltaRelX = deltaX / canvasRect.width;
+      const deltaRelY = deltaY / canvasRect.height;
+      
+      let newX = startMarkerX + deltaRelX;
+      let newY = startMarkerY + deltaRelY;
+      
+      newX = Math.min(0.95, Math.max(0.05, newX));
+      newY = Math.min(0.95, Math.max(0.05, newY));
+      
+      textX = newX;
+      textY = newY;
+      
+      forcePreviewUpdate();
+    };
+    
+    const onEnd = () => {
+      isMarkerDragging = false;
+    };
+    
+    dragMarker.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    dragMarker.addEventListener('touchstart', onStart, { passive: false });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+  }
+
+  window.addEventListener('resize', () => updateMarkerPosition());
+  window.addEventListener('scroll', () => updateMarkerPosition());
+  setInterval(() => updateMarkerPosition(), 200);
+
+  function enableCropMode() {
+    cropModeActive = true;
+    $('btnCropMode').classList.add('success');
+    $('btnCropMode').innerHTML = '✅ Выйти из режима обрезки';
+    $('btnResetCrop').style.display = 'inline-flex';
+    $('cropPreview').style.display = 'flex';
+    $('zoomControls').style.display = 'flex';
+    $('cropPresets').style.display = 'flex';
+    videoContainer.classList.add('crop-mode');
+    dragMarker.style.display = 'none';
+    showToast('🎯 Нажмите и перетащите область на видео, которую нужно оставить');
+  }
+
+  function disableCropMode() {
+    cropModeActive = false;
+    isSelectingCrop = false;
+    $('btnCropMode').classList.remove('success');
+    $('btnCropMode').innerHTML = '🎯 Включить режим обрезки';
+    $('btnResetCrop').style.display = 'none';
+    $('cropPreview').style.display = 'none';
+    $('zoomControls').style.display = 'none';
+    $('cropPresets').style.display = 'none';
+    videoContainer.classList.remove('crop-mode');
+    updateMarkerPosition();
+  }
+
+  $('btnCropMode').onclick = () => {
+    if (cropModeActive) disableCropMode();
+    else enableCropMode();
+  };
+
+  $('btnResetCrop').onclick = () => {
+    cropRect = null;
+    cropZoom = 1;
+    $('cropZoom').value = 1;
+    $('cropZoomValue').textContent = '100%';
+    disableCropMode();
+    forcePreviewUpdate();
+    showToast('🔄 Обрезка сброшена');
+  };
+
+  $('autoCropLogo').onclick = () => {
+    if (!duration) return;
+    const width = previewCanvas.width;
+    const height = previewCanvas.height;
+    const zoom = 1.2;
+    const newWidth = width / zoom;
+    const newHeight = height / zoom;
+    cropRect = { x: (width - newWidth) / 2, y: (height - newHeight) / 2, width: newWidth, height: newHeight };
+    cropZoom = zoom;
+    $('cropZoom').value = zoom;
+    $('cropZoomValue').textContent = Math.round(zoom * 100) + '%';
+    disableCropMode();
+    forcePreviewUpdate();
+    showToast(`✨ Видео увеличено в ${zoom}x`);
+  };
+
+  $('cropLogoTop').onclick = () => {
+    if (!duration) return;
+    const height = previewCanvas.height;
+    cropRect = { x: 0, y: 0, width: previewCanvas.width, height: height * 0.9 };
+    disableCropMode();
+    forcePreviewUpdate();
+    showToast('✅ Верхняя часть обрезана');
+  };
+
+  $('cropLogoCorner').onclick = () => {
+    if (!duration) return;
+    const width = previewCanvas.width * 0.85;
+    const height = previewCanvas.height * 0.85;
+    cropRect = { x: (previewCanvas.width - width) / 2, y: (previewCanvas.height - height) / 2, width, height };
+    disableCropMode();
+    forcePreviewUpdate();
+    showToast('✅ Края обрезаны');
+  };
+
+  $('cropZoom').oninput = () => {
+    cropZoom = parseFloat($('cropZoom').value);
+    $('cropZoomValue').textContent = Math.round(cropZoom * 100) + '%';
+    if (cropRect) {
+      const newWidth = previewCanvas.width / cropZoom;
+      const newHeight = previewCanvas.height / cropZoom;
+      cropRect = { x: (previewCanvas.width - newWidth) / 2, y: (previewCanvas.height - newHeight) / 2, width: newWidth, height: newHeight };
+      forcePreviewUpdate();
+    }
+  };
+
+  previewCanvas.addEventListener('mousedown', (e) => {
+    if (!cropModeActive) return;
+    if (e.button !== 0) return;
+    
+    isSelectingCrop = true;
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    
+    selectionStart = {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+    selectionEnd = { ...selectionStart };
+    e.preventDefault();
+  });
+
+  previewCanvas.addEventListener('touchstart', (e) => {
+    if (!cropModeActive) return;
+    isSelectingCrop = true;
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    const touch = e.touches[0];
+    selectionStart = {
+      x: (touch.clientX - rect.left) * scaleX,
+      y: (touch.clientY - rect.top) * scaleY
+    };
+    selectionEnd = { ...selectionStart };
+    e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isSelectingCrop || !cropModeActive) return;
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    selectionEnd = {
+      x: Math.min(previewCanvas.width, Math.max(0, (e.clientX - rect.left) * scaleX)),
+      y: Math.min(previewCanvas.height, Math.max(0, (e.clientY - rect.top) * scaleY))
+    };
+    forcePreviewUpdate();
+  });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!isSelectingCrop || !cropModeActive) return;
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    const touch = e.touches[0];
+    selectionEnd = {
+      x: Math.min(previewCanvas.width, Math.max(0, (touch.clientX - rect.left) * scaleX)),
+      y: Math.min(previewCanvas.height, Math.max(0, (touch.clientY - rect.top) * scaleY))
+    };
+    forcePreviewUpdate();
+    e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener('mouseup', finishCropSelection);
+  window.addEventListener('touchend', finishCropSelection);
+
+  function finishCropSelection() {
+    if (!isSelectingCrop || !cropModeActive) return;
+    isSelectingCrop = false;
+    
+    const x = Math.min(selectionStart.x, selectionEnd.x);
+    const y = Math.min(selectionStart.y, selectionEnd.y);
+    const width = Math.abs(selectionEnd.x - selectionStart.x);
+    const height = Math.abs(selectionEnd.y - selectionStart.y);
+    
+    if (width > 10 && height > 10) {
+      cropRect = { x, y, width, height };
+      cropZoom = previewCanvas.width / width;
+      $('cropZoom').value = Math.min(4, cropZoom);
+      $('cropZoomValue').textContent = Math.round(cropZoom * 100) + '%';
+      showToast(`✅ Область выбрана! Зум ${cropZoom.toFixed(2)}x`);
+      disableCropMode();
+      forcePreviewUpdate();
+    } else if (width > 0) {
+      showToast('❌ Область слишком маленькая', true);
+    }
+  }
+
+  $('quickPreset').onchange = () => {
+    const preset = $('quickPreset').value;
+    if (!preset) return;
+    
+    if (preset === 'watermark') {
+      $('overlayText').value = '© Моё видео';
+      $('textSize').value = '28';
+      $('textColor').value = '#ffffff';
+      textX = 0.85;
+      textY = 0.92;
+    } else if (preset === 'title') {
+      $('overlayText').value = 'Заголовок';
+      $('textSize').value = '56';
+      $('textColor').value = '#ffffff';
+      textX = 0.5;
+      textY = 0.5;
+    } else if (preset === 'subtitle') {
+      $('overlayText').value = 'Текст субтитров';
+      $('textSize').value = '36';
+      $('textColor').value = '#ffffff';
+      textX = 0.5;
+      textY = 0.85;
+    }
+    forcePreviewUpdate();
+  };
+
+  $('overlayText').oninput = forcePreviewUpdate;
+  $('clearTextBtn').onclick = () => {
+    $('overlayText').value = '';
+    forcePreviewUpdate();
+    dragMarker.style.display = 'none';
+  };
+  $('textColor').oninput = forcePreviewUpdate;
+  $('textSize').oninput = forcePreviewUpdate;
+  $('fontFamily').onchange = forcePreviewUpdate;
+  $('textStroke').onchange = forcePreviewUpdate;
+
+  $('btnExport').onclick = async () => {
+    if (!duration) return;
+
+    if (endTime - startTime < 0.5) {
+      showToast('❌ Выберите отрезок длиннее 0.5 секунд', true);
+      return;
+    }
+
+    const speed = parseFloat($('speedSelect').value);
+
+    // ✅ Ограничение на длительность экспорта
+    const exportDuration = (endTime - startTime) / speed;
+    if (exportDuration > MAX_EXPORT_DURATION) {
+      showToast(`❌ Слишком длинный отрезок (макс. ${MAX_EXPORT_DURATION} сек)`, true);
+      return;
+    }
+
+    isExportCancelled = false;
+    progressOverlay.style.display = 'flex';
+    progressFill.style.width = '0%';
+    progressText.textContent = '0%';
+
+    // ✅ Проверка готовности аудио перед экспортом
+    if (!audioConnectionReady) {
+      showToast('⏳ Подготовка аудио...', false);
+      await setupAudioOnce();
+    }
+
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = videoPlayer.videoWidth;
+    exportCanvas.height = videoPlayer.videoHeight;
+    const ctx = exportCanvas.getContext('2d');
+
+    // ✅ Индикатор качества экспорта
+    const quality = videoPlayer.videoWidth > 1920 ? 'Высокое' : 'Среднее';
+    console.log(`Экспорт ${quality} качества (${videoPlayer.videoWidth}x${videoPlayer.videoHeight})`);
+
+    const canvasStream = exportCanvas.captureStream(30);
+    
+    let combinedStream = canvasStream;
+    
+    // ✅ Корректная работа с аудио при повторных экспортах
+    if (audioConnectionReady && audioContext && audioSource) {
+      try {
+        await initAudio();
+        
+        const destination = audioContext.createMediaStreamDestination();
+        
+        // ✅ Временно отключаем от колонок, если подключено
+        if (audioConnectedToSpeakers) {
+          audioSource.disconnect();
+        }
+        
+        // Подключаем к destination для записи и обратно к колонкам
+        audioSource.connect(destination);
+        audioSource.connect(audioContext.destination);
+        audioConnectedToSpeakers = true;
+        
+        const audioStream = destination.stream;
+        combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...audioStream.getAudioTracks()
+        ]);
+      } catch (err) {
+        console.warn('Аудио не добавлено:', err);
+        combinedStream = canvasStream;
+      }
+    } else {
+      console.log('Аудио не подключено, экспорт без звука');
+    }
+
+    await recordVideo(combinedStream, exportCanvas, ctx, speed);
+  };
+
+  async function recordVideo(stream, canvas, ctx, speed) {
+    let mimeType = null;
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+      mimeType = 'video/webm;codecs=vp9';
+    } else if (MediaRecorder.isTypeSupported('video/webm')) {
+      mimeType = 'video/webm';
+    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
+    }
+    
+    if (!mimeType) {
+      showToast('❌ Ваш браузер не поддерживает запись видео', true);
+      progressOverlay.style.display = 'none';
+      return;
+    }
+    
+    const bitrate = videoPlayer.videoWidth * videoPlayer.videoHeight > 1920*1080 ? 8000000 : 5000000;
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: bitrate });
+    const chunks = [];
+    
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      if (isExportCancelled) {
+        chunks.length = 0;
+        progressOverlay.style.display = 'none';
+        showToast('❌ Экспорт отменён', true);
+        return;
+      }
+      
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `video_trimmed_${Date.now()}.${mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      // ✅ Восстанавливаем нормальную скорость воспроизведения
+      videoPlayer.playbackRate = 1;
+      
+      progressOverlay.style.display = 'none';
+      showToast('✅ Видео сохранено!');
+    };
+
+    try {
+      const originalPlaybackRate = videoPlayer.playbackRate;
+      
+      recorder.start();
+      videoPlayer.currentTime = startTime;
+      videoPlayer.playbackRate = speed;
+      
+      await videoPlayer.play();
+
+      const exportDuration = (endTime - startTime) / speed;
+      const startExportTime = Date.now();
+
+      // ✅ Используем requestVideoFrameCallback если доступен, иначе requestAnimationFrame
+      const useVideoFrameCallback = typeof videoPlayer.requestVideoFrameCallback === 'function';
+
+      function renderFrame() {
+        if (isExportCancelled) {
+          videoPlayer.pause();
+          videoPlayer.playbackRate = originalPlaybackRate;
+          if (recorder.state === 'recording') {
+            recorder.stop();
+            chunks.length = 0;
+            // ✅ Очистка canvas при отмене для предотвращения утечки памяти
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+          return;
+        }
+
+        const elapsed = (Date.now() - startExportTime) / 1000;
+        const progress = Math.min(100, (elapsed / exportDuration) * 100);
+        
+        progressFill.style.width = progress + '%';
+        progressText.textContent = Math.round(progress) + '%';
+
+        if (!cropRect) {
+          ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.drawImage(
+            videoPlayer,
+            cropRect.x, cropRect.y, cropRect.width, cropRect.height,
+            0, 0, canvas.width, canvas.height
+          );
+        }
+        
+        const text = $('overlayText').value;
+        if (text) {
+          const size = +$('textSize').value;
+          const family = $('fontFamily').value;
+          const color = $('textColor').value;
+          const useStroke = $('textStroke').checked;
+          
+          const scale = Math.min(2, Math.max(0.5, canvas.width / 1280));
+          let finalSize = Math.floor(size * scale);
+          finalSize = Math.min(120, Math.max(16, finalSize));
+          
+          ctx.save();
+          ctx.font = `bold ${finalSize}px "${family}", system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          const maxWidth = canvas.width * 0.9;
+          const words = text.split(/\s+/);
+          const lines = [];
+          let currentLine = '';
+          for (let w of words) {
+            const test = currentLine ? currentLine + ' ' + w : w;
+            if (ctx.measureText(test).width > maxWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = w;
+            } else {
+              currentLine = test;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+          if (lines.length === 0) lines.push(text);
+          
+          const lineHeight = finalSize * 1.25;
+          const totalHeight = lines.length * lineHeight;
+          
+          let absX = textX * canvas.width;
+          let absY = textY * canvas.height;
+          
+          absX = Math.min(canvas.width - finalSize/2, Math.max(finalSize/2, absX));
+          absY = Math.min(canvas.height - totalHeight/2, Math.max(totalHeight/2, absY));
+          
+          for (let i = 0; i < lines.length; i++) {
+            const y = absY - totalHeight/2 + i * lineHeight + lineHeight/2;
+            if (useStroke) {
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = Math.max(3, finalSize/10);
+              ctx.strokeText(lines[i], absX, y);
+            }
+            ctx.fillStyle = color;
+            ctx.fillText(lines[i], absX, y);
+          }
+          ctx.restore();
+        }
+
+        if (videoPlayer.currentTime >= endTime || elapsed >= exportDuration) {
+          videoPlayer.pause();
+          videoPlayer.playbackRate = originalPlaybackRate;
+          
+          setTimeout(() => {
+            if (recorder.state === 'recording') {
+              recorder.stop();
+            }
+          }, 500);
+          return;
+        }
+
+        // ✅ Более точная синхронизация с видео кадрами
+        if (useVideoFrameCallback) {
+          videoPlayer.requestVideoFrameCallback(renderFrame);
+        } else {
+          requestAnimationFrame(renderFrame);
+        }
+      }
+
+      renderFrame();
+    } catch (error) {
+      console.error('Ошибка экспорта:', error);
+      showToast('❌ Ошибка при экспорте', true);
+      progressOverlay.style.display = 'none';
+    }
+  }
+
+  btnCancelExport.onclick = () => {
+    isExportCancelled = true;
+  };
+
+  function showToast(msg, isError = false) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.toggle('error', isError);
+    t.classList.add('show');
+    setTimeout(() => {
+      t.classList.remove('show');
+      t.classList.remove('error');
+    }, 3000);
+  }
+
+  $('copyPhone').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText('8-920-227-56-76');
+      const btn = $('copyPhone');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✅ Скопировано!';
+      setTimeout(() => btn.innerHTML = orig, 2000);
+    } catch (err) {
+      showToast('❌ Не удалось скопировать', true);
+    }
+  };
+
+  window.addEventListener('beforeunload', () => {
+    if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+    if (audioContext) audioContext.close();
+  });
+
+  initMarkerDrag();
+})();
+</script>
+
+</body>
+</html>
